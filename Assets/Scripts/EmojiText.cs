@@ -4,9 +4,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Text;
+using UnityEngine.EventSystems;
 
-
-public class EmojiText : Text {
+public class EmojiText : Text, IPointerClickHandler
+{
 
 	private const bool EMOJI_LARGE = true;
 	private static Dictionary<string,EmojiInfo> EmojiIndex = null;
@@ -18,8 +20,61 @@ public class EmojiText : Text {
 		public float size;
 		public int len;
 	}
-		
-	readonly UIVertex[] m_TempVerts = new UIVertex[4];
+
+    /// <summary>
+    /// 解析完最终的文本
+    /// </summary>
+    private string m_OutputText;
+
+    public override void SetVerticesDirty()
+    {
+        base.SetVerticesDirty();
+        UpdateQuadImage();
+    }
+
+    protected void UpdateQuadImage()
+    {
+#if UNITY_EDITOR
+        if (UnityEditor.PrefabUtility.GetPrefabType(this) == UnityEditor.PrefabType.Prefab)
+        {
+            return;
+        }
+#endif
+        m_OutputText = GetOutputText(text);
+    }
+
+    public delegate void VoidOnHrefClick(string hefName);
+    public VoidOnHrefClick onHrefClick;
+
+    /// <summary>
+    /// 点击事件检测是否点击到超链接文本
+    /// </summary>
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        Vector2 lp;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            rectTransform, eventData.position, eventData.pressEventCamera, out lp);
+
+        foreach (var hrefInfo in m_HrefInfos)
+        {
+            var boxes = hrefInfo.boxes;
+            for (var i = 0; i < boxes.Count; ++i)
+            {
+                if (boxes[i].Contains(lp))
+                {
+                    if (onHrefClick != null)
+                    {
+                        onHrefClick(hrefInfo.name);
+                    }
+                    Debug.Log("click:" + hrefInfo.name);
+                    return;
+                }
+            }
+
+        }
+    }
+
+    readonly UIVertex[] m_TempVerts = new UIVertex[4];
 	protected override void OnPopulateMesh(VertexHelper toFill)
 	{
 		if (font == null)
@@ -45,9 +100,11 @@ public class EmojiText : Text {
 			}
 		}
 
+        //key是标签在字符串中的索引
+
 		Dictionary<int,EmojiInfo> emojiDic = new Dictionary<int, EmojiInfo> ();
 		if (supportRichText) {
-			MatchCollection matches = Regex.Matches (text, "\\[[a-z0-9A-Z]+\\]");
+			MatchCollection matches = Regex.Matches (m_OutputText, "\\[[a-z0-9A-Z]+\\]");//把表情标签全部匹配出来
 			for (int i = 0; i < matches.Count; i++) {
 				EmojiInfo info;
 				if (EmojiIndex.TryGetValue (matches [i].Value, out info)) {
@@ -65,9 +122,12 @@ public class EmojiText : Text {
 		Vector2 extents = rectTransform.rect.size;
 
 		var settings = GetGenerationSettings(extents);
-		cachedTextGenerator.Populate(text, settings);
+        var orignText = m_Text;
+        m_Text = m_OutputText;
+        cachedTextGenerator.Populate(m_Text, settings);//重置网格
+        m_Text = orignText;
 
-		Rect inputRect = rectTransform.rect;
+        Rect inputRect = rectTransform.rect;
 
 		// get the text alignment anchor point for the text in local space
 		Vector2 textAnchorPivot = GetTextAnchorPivot(alignment);
@@ -108,9 +168,11 @@ public class EmojiText : Text {
 			}
 			for (int i = 0; i < vertCount; ++i) {
 				EmojiInfo info;
-				int index = i / 4;
-				if (emojiDic.TryGetValue (index, out info)) {
+				int index = i / 4;//每个字符4个顶点
+				if (emojiDic.TryGetValue (index, out info)) {//这个顶点位置是否为表情开始的index
+                    Debug.Log(" emojiDic index:" + index);
 					//compute the distance of '[' and get the distance of emoji 
+                    //计算表情标签2个顶点之间的距离， * 3 得出宽度（表情有3位）
 					float charDis = (verts [i + 1].position.x - verts [i].position.x) * 3;
 					m_TempVerts [3] = verts [i];//1
 					m_TempVerts [2] = verts [i + 1];//2
@@ -121,8 +183,10 @@ public class EmojiText : Text {
 					m_TempVerts [2].position += new Vector3 (charDis, 0, 0);
 					m_TempVerts [1].position += new Vector3 (charDis, 0, 0);
 
-					//make emoji has equal width and height
-					float fixValue = (m_TempVerts [2].position.x - m_TempVerts [3].position.x - (m_TempVerts [2].position.y - m_TempVerts [1].position.y));
+                    float fixWidth = m_TempVerts[2].position.x - m_TempVerts[3].position.x;
+                    float fixHeight = (m_TempVerts[2].position.y - m_TempVerts[1].position.y);
+                    //make emoji has equal width and height
+                    float fixValue = (fixWidth - fixHeight);//把宽度变得跟高度一样
 					m_TempVerts [2].position -= new Vector3 (fixValue, 0, 0);
 					m_TempVerts [1].position -= new Vector3 (fixValue, 0, 0);
 
@@ -135,7 +199,8 @@ public class EmojiText : Text {
 					curRepairDis = repairDistance;
 					int dot = 0;//repair next line distance
 					for (int j = info.len - 1; j > 0; j--) {
-						if (verts [i + j * 4 + 3].position.y >= verts [i + 3].position.y) {
+                        int infoIndex = i + j * 4 + 3;
+                        if (verts.Count > infoIndex && verts[infoIndex].position.y >= verts [i + 3].position.y) {
 							repairDistance += verts [i + j * 4 + 1].position.x - m_TempVerts [2].position.x;
 							break;
 						} else {
@@ -187,4 +252,67 @@ public class EmojiText : Text {
 		}
 		m_DisableFontTextureRebuiltCallback = false;
 	}
+
+    /// <summary>
+    /// 超链接正则
+    /// </summary>
+    public static readonly Regex s_HrefRegex =
+        new Regex(@"<a href=([^>\n\s]+)>(.*?)(</a>)", RegexOptions.Singleline);
+
+    /// <summary>
+    /// 超链接信息列表
+    /// </summary>
+    private readonly List<HrefInfo> m_HrefInfos = new List<HrefInfo>();
+
+    /// <summary>
+    /// 文本构造器
+    /// </summary>
+    protected static readonly StringBuilder s_TextBuilder = new StringBuilder();
+    /// <summary>
+    /// 获取超链接解析后的最后输出文本
+    /// </summary>
+    /// <returns></returns>
+    protected virtual string GetOutputText(string outputText)
+    {
+        s_TextBuilder.Length = 0;
+        m_HrefInfos.Clear();
+        var indexText = 0;
+
+        foreach (Match match in s_HrefRegex.Matches(outputText))
+        {
+            s_TextBuilder.Append(outputText.Substring(indexText, match.Index - indexText));
+            s_TextBuilder.Append("<color='#9ed7ff'>");  // 超链接颜色ff6600
+
+            var group = match.Groups[1];
+            var hrefInfo = new HrefInfo
+            {
+                startIndex = s_TextBuilder.Length * 4, // 超链接里的文本起始顶点索引
+                endIndex = (s_TextBuilder.Length + match.Groups[2].Length - 1) * 4 + 3,
+                name = group.Value
+            };
+            m_HrefInfos.Add(hrefInfo);
+
+            s_TextBuilder.Append(match.Groups[2].Value);
+            s_TextBuilder.Append("</color>");
+            indexText = match.Index + match.Length;
+        }
+
+        s_TextBuilder.Append(outputText.Substring(indexText, outputText.Length - indexText));
+        return s_TextBuilder.ToString();
+    }
+
+    /// <summary>
+    /// 超链接信息类
+    /// </summary>
+    private class HrefInfo
+    {
+        public int startIndex;
+
+        public int endIndex;
+
+        public string name;
+
+        public readonly List<Rect> boxes = new List<Rect>();
+    }
 }
+

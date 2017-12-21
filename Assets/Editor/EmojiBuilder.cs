@@ -70,17 +70,17 @@ public class EmojiBuilder  {
 		for (int i = 0; i < files.Length; i++) {
 			string[] strs = files [i].Split ('/');
 			string[] strs2 = strs [strs.Length - 1].Split ('.');
-			string filename = strs2 [0];
+			string filename = strs2 [0];//kiss_1
 
 			string[] t = filename.Split('_');
 			string id = t [0];
-			if (sourceDic.ContainsKey(id)) {
+			if (sourceDic.ContainsKey(id)) {//根据key做一个累加
 				sourceDic[id]++;
 			} else {
 				sourceDic.Add (id, 1);
 			}
 		}
-			
+
 		//create the directory if it is not exist.
 		if (!Directory.Exists (OutputPath)) {
 			Directory.CreateDirectory (OutputPath);
@@ -88,7 +88,7 @@ public class EmojiBuilder  {
 
 		Dictionary<string,EmojiInfo> emojiDic = new Dictionary<string, EmojiInfo> ();
 
-		int totalFrames = 0;
+		int totalFrames = 0;//总帧数
 		foreach (int value in sourceDic.Values) {
 			totalFrames += value;
 		}
@@ -106,19 +106,19 @@ public class EmojiBuilder  {
 				if (sourceDic[key] == 1) {
 					path += ".png";
 				} else {
-					path += "_" + (index + 1).ToString() + ".png";
+					path += "_" + (index + 1).ToString() + ".png";//组装好小图的路径
 				}
 
-				Texture2D asset = AssetDatabase.LoadAssetAtPath<Texture2D> (path);
+				Texture2D asset = AssetDatabase.LoadAssetAtPath<Texture2D> (path);//加载小图
 				Color[] colors = asset.GetPixels (0); 
 
 				for (int i = 0; i < EmojiSize; i++) {
 					for (int j = 0; j < EmojiSize; j++) {
-						newTex.SetPixel (x + i, y + j, colors [i + j * EmojiSize]);
+						newTex.SetPixel (x + i, y + j, colors [i + j * EmojiSize]);//像素级拷贝到大图集里
 					}
 				}
 
-				string t = System.Convert.ToString (sourceDic [key] - 1, 2);
+				string t = System.Convert.ToString (sourceDic [key] - 1, 2);//持续多少帧转成2进制，最多支持8帧
 				float r = 0, g = 0, b = 0;
 				if (t.Length >= 3) {
 					r = t [2] == '1' ? 0.5f : 0;
@@ -130,21 +130,22 @@ public class EmojiBuilder  {
 				} else {
 					r = t [0] == '1' ? 0.5f : 0;
 				}
-
+                //写入到数据贴图里
 				dataTex.SetPixel (x / EmojiSize, y / EmojiSize, new Color (r, g, b, 1));
 
 				if (! emojiDic.ContainsKey (key)) {
 					EmojiInfo info;
-					if (keyindex < keylist.Count)
+					if (keyindex < keylist.Count)//从0-9 a-z A-Z都用完了，就拼接2维的向量
 					{
 						info.key = "[" + char.ToString(keylist[keyindex]) + "]";
-					}else
+					}
+                    else
 					{
 						info.key = "[" + char.ToString(keylist[keyindex / keylist.Count]) + char.ToString(keylist[keyindex % keylist.Count]) + "]";
 					}
-					info.x = (x * 1.0f / texSize.x).ToString();
-					info.y = (y * 1.0f / texSize.y).ToString();
-					info.size = (EmojiSize * 1.0f / texSize.x).ToString ();
+					info.x = (x * 1.0f / texSize.x).ToString();//计算成UV
+					info.y = (y * 1.0f / texSize.y).ToString();//计算成UV
+					info.size = (EmojiSize * 1.0f / texSize.x).ToString ();//尺寸转成UV比例
 
 					emojiDic.Add (key, info);
 					keyindex ++;
@@ -182,6 +183,9 @@ public class EmojiBuilder  {
 		EditorUtility.DisplayDialog ("Success", "Generate Emoji Successful!", "OK");
 	}
 
+    /// <summary>
+    /// 计算一下需要多大的图集才能装得下
+    /// </summary>
 	private static Vector2 ComputeAtlasSize(int count)
 	{
 		long total = count * EmojiSize * EmojiSize;
@@ -197,17 +201,29 @@ public class EmojiBuilder  {
 		TextureImporter emojiTex = AssetImporter.GetAtPath (OutputPath + "emoji_tex.png") as TextureImporter;
 		emojiTex.filterMode = FilterMode.Point;
 		emojiTex.mipmapEnabled = false;
-		emojiTex.sRGBTexture = true;
-		emojiTex.alphaSource = TextureImporterAlphaSource.FromInput;
-		emojiTex.textureCompression = TextureImporterCompression.Uncompressed;
-		emojiTex.SaveAndReimport ();
+
+        //emojiTex.sRGBTexture = true;
+        //emojiTex.alphaSource = TextureImporterAlphaSource.FromInput;
+        //emojiTex.textureCompression = TextureImporterCompression.Uncompressed;
+
+        emojiTex.isReadable = false;
+        emojiTex.textureFormat = TextureImporterFormat.RGBA32;
+        //emojiTex.alphaIsTransparency = true;
+
+        emojiTex.SaveAndReimport();
 
 		TextureImporter emojiData = AssetImporter.GetAtPath (OutputPath + "emoji_data.png") as TextureImporter;
 		emojiData.filterMode = FilterMode.Point;
 		emojiData.mipmapEnabled = false;
-		emojiData.sRGBTexture = false;
-		emojiData.alphaSource = TextureImporterAlphaSource.None;
-		emojiData.textureCompression = TextureImporterCompression.Uncompressed;
-		emojiData.SaveAndReimport ();
+
+        emojiData.isReadable = false;
+        emojiData.textureFormat = TextureImporterFormat.RGBA32;
+        //emojiData.alphaIsTransparency = false;
+
+        //emojiData.sRGBTexture = false;
+        //emojiData.alphaSource = TextureImporterAlphaSource.None;
+        //emojiData.textureCompression = TextureImporterCompression.Uncompressed;
+
+        emojiData.SaveAndReimport ();
 	}
 }
