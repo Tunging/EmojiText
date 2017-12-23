@@ -9,7 +9,6 @@ using UnityEngine.EventSystems;
 
 public class EmojiText : Text, IPointerClickHandler
 {
-
 	private const bool EMOJI_LARGE = true;
 	private static Dictionary<string,EmojiInfo> EmojiIndex = null;
 
@@ -29,11 +28,7 @@ public class EmojiText : Text, IPointerClickHandler
     public override void SetVerticesDirty()
     {
         base.SetVerticesDirty();
-        UpdateQuadImage();
-    }
 
-    protected void UpdateQuadImage()
-    {
 #if UNITY_EDITOR
         if (UnityEditor.PrefabUtility.GetPrefabType(this) == UnityEditor.PrefabType.Prefab)
         {
@@ -41,37 +36,6 @@ public class EmojiText : Text, IPointerClickHandler
         }
 #endif
         m_OutputText = GetOutputText(text);
-    }
-
-    public delegate void VoidOnHrefClick(string hefName);
-    public VoidOnHrefClick onHrefClick;
-
-    /// <summary>
-    /// 点击事件检测是否点击到超链接文本
-    /// </summary>
-    public void OnPointerClick(PointerEventData eventData)
-    {
-        Vector2 lp;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            rectTransform, eventData.position, eventData.pressEventCamera, out lp);
-
-        foreach (var hrefInfo in m_HrefInfos)
-        {
-            var boxes = hrefInfo.boxes;
-            for (var i = 0; i < boxes.Count; ++i)
-            {
-                if (boxes[i].Contains(lp))
-                {
-                    if (onHrefClick != null)
-                    {
-                        onHrefClick(hrefInfo.name);
-                    }
-                    Debug.Log("click:" + hrefInfo.name);
-                    return;
-                }
-            }
-
-        }
     }
 
     readonly UIVertex[] m_TempVerts = new UIVertex[4];
@@ -170,7 +134,9 @@ public class EmojiText : Text, IPointerClickHandler
 				EmojiInfo info;
 				int index = i / 4;//每个字符4个顶点
 				if (emojiDic.TryGetValue (index, out info)) {//这个顶点位置是否为表情开始的index
-                    Debug.Log(" emojiDic index:" + index);
+
+                    HrefInfosIndexAdjust(i);//矫正一下超链接的Index
+
 					//compute the distance of '[' and get the distance of emoji 
                     //计算表情标签2个顶点之间的距离， * 3 得出宽度（表情有3位）
 					float charDis = (verts [i + 1].position.x - verts [i].position.x) * 3;
@@ -248,10 +214,44 @@ public class EmojiText : Text, IPointerClickHandler
 						toFill.AddUIVertexQuad (m_TempVerts);
 				}
 			}
-
 		}
 		m_DisableFontTextureRebuiltCallback = false;
-	}
+
+        UIVertex vert = new UIVertex();
+        // 处理超链接包围框
+        foreach (var hrefInfo in m_HrefInfos)
+        {
+            hrefInfo.boxes.Clear();
+            if (hrefInfo.startIndex >= toFill.currentVertCount)
+            {
+                continue;
+            }
+            // 将超链接里面的文本顶点索引坐标加入到包围框
+            toFill.PopulateUIVertex(ref vert, hrefInfo.startIndex);
+            var pos = vert.position;
+            var bounds = new Bounds(pos, Vector3.zero);
+            for (int i = hrefInfo.startIndex, m = hrefInfo.endIndex; i < m; i++)
+            {
+                if (i >= toFill.currentVertCount)
+                {
+                    break;
+                }
+
+                toFill.PopulateUIVertex(ref vert, i);
+                pos = vert.position;
+                if (pos.x < bounds.min.x) // 换行重新添加包围框
+                {
+                    hrefInfo.boxes.Add(new Rect(bounds.min, bounds.size));
+                    bounds = new Bounds(pos, Vector3.zero);
+                }
+                else
+                {
+                    bounds.Encapsulate(pos); // 扩展包围框
+                }
+            }
+            hrefInfo.boxes.Add(new Rect(bounds.min, bounds.size));
+        }
+    }
 
     /// <summary>
     /// 超链接正则
@@ -299,6 +299,51 @@ public class EmojiText : Text, IPointerClickHandler
 
         s_TextBuilder.Append(outputText.Substring(indexText, outputText.Length - indexText));
         return s_TextBuilder.ToString();
+    }
+
+    private void HrefInfosIndexAdjust(int imgIndex)
+    {
+        foreach (var hrefInfo in m_HrefInfos)//如果后面有超链接，需要把位置往前挪
+        {
+            if (imgIndex < hrefInfo.startIndex)
+            {
+                hrefInfo.startIndex -= 8;
+                hrefInfo.endIndex -= 8;
+            }
+        }
+    }
+
+
+    public delegate void VoidOnHrefClick(string hefName);
+    public VoidOnHrefClick onHrefClick;
+
+    /// <summary>
+    /// 点击事件检测是否点击到超链接文本
+    /// </summary>
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        Vector2 lp;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            rectTransform, eventData.position, eventData.pressEventCamera, out lp);
+
+        foreach (var hrefInfo in m_HrefInfos)
+        {
+            var boxes = hrefInfo.boxes;
+            for (var i = 0; i < boxes.Count; ++i)
+            {
+                if (boxes[i].Contains(lp))
+                {
+
+                    if (onHrefClick != null)
+                    {
+                        onHrefClick(hrefInfo.name);
+                    }
+                    Debug.Log("点击了:" + hrefInfo.name);
+                    return;
+                }
+            }
+
+        }
     }
 
     /// <summary>

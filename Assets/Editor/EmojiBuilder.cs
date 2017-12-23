@@ -135,12 +135,12 @@ public class EmojiBuilder  {
 
 				if (! emojiDic.ContainsKey (key)) {
 					EmojiInfo info;
-					if (keyindex < keylist.Count)//从0-9 a-z A-Z都用完了，就拼接2维的向量
+					if (keyindex < keylist.Count)
 					{
 						info.key = "[" + char.ToString(keylist[keyindex]) + "]";
 					}
-                    else
-					{
+                    else//从0-9 a-z A-Z都用完了，就拼接2维的向量
+                    {
 						info.key = "[" + char.ToString(keylist[keyindex / keylist.Count]) + char.ToString(keylist[keyindex % keylist.Count]) + "]";
 					}
 					info.x = (x * 1.0f / texSize.x).ToString();//计算成UV
@@ -202,13 +202,9 @@ public class EmojiBuilder  {
 		emojiTex.filterMode = FilterMode.Point;
 		emojiTex.mipmapEnabled = false;
 
-        //emojiTex.sRGBTexture = true;
-        //emojiTex.alphaSource = TextureImporterAlphaSource.FromInput;
-        //emojiTex.textureCompression = TextureImporterCompression.Uncompressed;
-
-        emojiTex.isReadable = false;
-        emojiTex.textureFormat = TextureImporterFormat.RGBA32;
-        //emojiTex.alphaIsTransparency = true;
+        emojiTex.sRGBTexture = true;
+        emojiTex.alphaSource = TextureImporterAlphaSource.FromInput;
+        emojiTex.textureCompression = TextureImporterCompression.Uncompressed;
 
         emojiTex.SaveAndReimport();
 
@@ -216,13 +212,9 @@ public class EmojiBuilder  {
 		emojiData.filterMode = FilterMode.Point;
 		emojiData.mipmapEnabled = false;
 
-        emojiData.isReadable = false;
-        emojiData.textureFormat = TextureImporterFormat.RGBA32;
-        //emojiData.alphaIsTransparency = false;
-
-        //emojiData.sRGBTexture = false;
-        //emojiData.alphaSource = TextureImporterAlphaSource.None;
-        //emojiData.textureCompression = TextureImporterCompression.Uncompressed;
+        emojiData.sRGBTexture = false;
+        emojiData.alphaSource = TextureImporterAlphaSource.None;
+        emojiData.textureCompression = TextureImporterCompression.Uncompressed;
 
         emojiData.SaveAndReimport ();
 	}
